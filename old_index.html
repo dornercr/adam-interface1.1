@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADAM - Automated Detection of Authentic Material</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4e9af1;
+            --secondary-color: #6c757d;
+            --background-color: #f0f4f8;
+            --card-bg: rgba(255, 255, 255, 0.8);
+            --text-color: #333333;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode {
+            --primary-color: #4e9af1;
+            --secondary-color: #a0aec0;
+            --background-color: #1a202c;
+            --card-bg: rgba(44, 55, 71, 0.8);
+            --text-color: #e2e8f0;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .navbar {
+            background-color: var(--primary-color);
+            backdrop-filter: blur(10px);
+        }
+
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: none;
+            box-shadow: 0 4px 6px var(--shadow-color);
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+            backdrop-filter: blur(5px);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px var(--shadow-color);
+        }
+
+        .ilr-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 0.8rem;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background-color: #3a7bd5;
+            border-color: #3a7bd5;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(78, 154, 241, 0.25);
+        }
+
+        #results {
+            min-height: 400px;
+        }
+
+        .loading {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            height: 100px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-spinner {
+            border: 4px solid var(--secondary-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        .back-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        #darkModeToggle {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fas fa-search-plus me-2"></i>ADAM</a>
+            <span class="navbar-text text-light d-none d-md-inline">Automated Detection of Authentic Material</span>
+            <div class="form-check form-switch ms-auto">
+                <input class="form-check-input" type="checkbox" id="darkModeToggle" aria-label="Toggle dark mode">
+                <label class="form-check-label text-light" for="darkModeToggle">
+                    <i class="fas fa-moon"></i>
+                </label>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-lg-3 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-filter me-2"></i>Search Filters</h5>
+                        <div class="mb-3">
+                            <label for="languageSelect" class="form-label">Language</label>
+                            <select class="form-select" id="languageSelect" onchange="loadLanguageData()">
+                                <option value="">Select Language</option>
+                                <option value="spanish">Spanish</option>
+                                <option value="english">English</option>
+                                <option value="arabic">Arabic</option>
+                                <option value="french">French</option>
+                                <option value="turkish">Turkish</option>
+                                <option value="german">German</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="topicSearch" class="form-label">Topic</label>
+                            <input type="text" class="form-control" id="topicSearch" placeholder="Enter keywords">
+                        </div>
+                        <div class="mb-3">
+                            <label for="ilrSelect" class="form-label">ILR Level</label>
+                            <select class="form-select" id="ilrSelect">
+                                <option value="">All Levels</option>
+                            </select>
+                        </div>
+                        <button onclick="searchArticles()" class="btn btn-primary w-100">
+                            <i class="fas fa-search me-2"></i>Search
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-9">
+                <div class="loading" id="loadingSpinner">
+                    <div class="loading-spinner"></div>
+                </div>
+                <div id="results" class="row g-4"></div>
+                <div id="pagination" class="mt-4 text-center">
+                    <button id="prevPage" class="btn btn-outline-primary" onclick="changePage(-1)">
+                        <i class="fas fa-chevron-left me-2"></i>Previous
+                    </button>
+                    <span id="pageInfo" class="mx-3"></span>
+                    <button id="nextPage" class="btn btn-outline-primary" onclick="changePage(1)">
+                        Next<i class="fas fa-chevron-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-light text-center text-lg-start mt-4">
+        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.05);">
+            © 2024 ADAM - Automated Detection of Authentic Material
+        </div>
+    </footer>
+
+    <button id="backToTop" class="btn btn-primary back-to-top" aria-label="Back to top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
+    <div class="toast-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script>
+        let articles = [];
+        let currentPage = 1;
+        const resultsPerPage = 50;
+
+        // Dark mode toggle
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        darkModeToggle.addEventListener('change', () => {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        });
+
+        // Check for saved dark mode preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-mode');
+            darkModeToggle.checked = true;
+        }
+
+        function showLoading() {
+            document.getElementById('loadingSpinner').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+        }
+
+        function showToast(message, type = 'info') {
+            const toastContainer = document.querySelector('.toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast align-items-center text-white bg-${type} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+            toastContainer.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        const debouncedSearch = debounce(() => searchArticles(), 300);
+
+        document.getElementById('topicSearch').addEventListener('input', debouncedSearch);
+        document.getElementById('ilrSelect').addEventListener('change', debouncedSearch);
+
+        function loadLanguageData() {
+            const language = document.getElementById('languageSelect').value;
+            if (!language) return;
+
+            showLoading();
+
+            fetch('available_files.json')
+                .then(response => response.json())
+                .then(availableFiles => {
+                    const languageFiles = availableFiles[language];
+                    if (!languageFiles || languageFiles.length === 0) {
+                        throw new Error(`No CSV files found for language: ${language}`);
+                    }
+
+                    const promises = languageFiles.map(csvFile =>
+                        Papa.parsePromise(csvFile, { download: true, header: true })
+                    );
+
+                    return Promise.all(promises);
+                })
+                .then(results => {
+                    articles = results.flatMap(result => result.data);
+                    populateILRDropdown();
+                    displayResults(articles, currentPage);
+                    showToast(`Loaded ${articles.length} articles for ${language}`, 'success');
+                })
+                .catch(error => {
+                    console.error("Error loading data:", error);
+                    showToast("An error occurred while loading the data. Please try again.", 'danger');
+                })
+                .finally(hideLoading);
+        }
+
+        Papa.parsePromise = function(file, config) {
+            return new Promise((complete, error) => {
+                Papa.parse(file, { ...config, complete, error });
+            });
+        };
+
+        function populateILRDropdown() {
+            const ilrLevels = [...new Set(articles.map(a => a.ilr_quantized))].sort();
+            const ilrSelect = document.getElementById('ilrSelect');
+            ilrSelect.innerHTML = '<option value="">All Levels</option>';
+            ilrLevels.forEach(level => {
+                const option = document.createElement('option');
+                option.value = level;
+                option.textContent = `ILR ${level}`;
+                ilrSelect.appendChild(option);
+            });
+        }
+
+        function searchArticles() {
+            const topic = document.getElementById('topicSearch').value.toLowerCase();
+            const ilr = document.getElementById('ilrSelect').value;
+
+            const filteredArticles = articles.filter(article => {
+                const titleMatch = article.title && article.title.toLowerCase().includes(topic);
+                const summaryMatch = article.summary && article.summary.toLowerCase().includes(topic);
+                const ilrMatch = ilr === '' || article.ilr_quantized === ilr;
+
+                return (topic === '' || titleMatch || summaryMatch) && ilrMatch;
+            });
+
+            displayResults(filteredArticles, 1);
+        }
+
+        function displayResults(results, page) {
+            const startIndex = (page - 1) * resultsPerPage;
+            const endIndex = startIndex + resultsPerPage;
+            const paginatedResults = results.slice(startIndex, endIndex);
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (paginatedResults.length === 0) {
+                resultsDiv.innerHTML = '<div class="col-12"><div class="alert alert-info">No results found. Try adjusting your search criteria.</div></div>';
+                return;
+            }
+
+            paginatedResults.forEach(article => {
+                const articleDiv = document.createElement('div');
+                articleDiv.className = 'col-md-6';
+                articleDiv.innerHTML = `
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <span class="badge bg-primary ilr-badge">ILR ${article.ilr_quantized || 'N/A'}</span>
+                            <h5 class="card-title">${article.title || 'No Title'}</h5>
+                            <h6 class="card-subtitle mb-2 text-muted">${article.language || 'Unknown Language'}</h6>
+                            <p class="card-text">${article.summary || 'No summary available'}</p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0">
+                            ${article.link ? `<a href="${article.link}" class="btn btn-sm btn-outline-primary" target="_blank">Read Full Article</a>` : ''}
+                            <button class="btn btn-sm btn-outline-secondary ms-2" onclick="saveForLater('${article.id}')">
+                                <i class="far fa-bookmark"></i> Save
+                            </button>
+                        </div>
+                    </div>
+                `;
+                resultsDiv.appendChild(articleDiv);
+            });
+
+            updatePaginationControls(results.length, page);
+        }
+
+        function updatePaginationControls(totalResults, page) {
+            const pageInfo = document.getElementById('pageInfo');
+            const prevPage = document.getElementById('prevPage');
+            const nextPage = document.getElementById('nextPage');
+
+            pageInfo.textContent = `Page ${page} of ${Math.ceil(totalResults / resultsPerPage)}`;
+            prevPage.disabled = page === 1;
+            nextPage.disabled = page * resultsPerPage >= totalResults;
+        }
+
+        function changePage(delta) {
+            currentPage += delta;
+            searchArticles();
+        }
+
+        function saveForLater(articleId) {
+            showToast(`Article ${articleId} saved for later`, 'info');
+        }
+    </script>
+</body>
+</html>
