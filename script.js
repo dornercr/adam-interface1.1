@@ -1,5 +1,6 @@
 // Global variables
 let articles = [];
+let filteredArticles = [];
 let currentPage = 1;
 const resultsPerPage = 50;
 
@@ -111,7 +112,7 @@ function searchArticles() {
     const topic = topicSearch.value.toLowerCase();
     const ilr = ilrSelect.value;
 
-    const filteredArticles = articles.filter(article => {
+    filteredArticles = articles.filter(article => {
         const titleMatch = article.title && article.title.toLowerCase().includes(topic);
         const summaryMatch = article.summary && article.summary.toLowerCase().includes(topic);
         const ilrMatch = ilr === '' || article.ilr_quantized === ilr;
@@ -119,14 +120,14 @@ function searchArticles() {
         return (topic === '' || titleMatch || summaryMatch) && ilrMatch;
     });
 
-    displayResults(filteredArticles, 1);
+    displayResults(1);
 }
 
-function displayResults(results, page) {
+function displayResults(page) {
     currentPage = page;
     const startIndex = (page - 1) * resultsPerPage;
     const endIndex = startIndex + resultsPerPage;
-    const paginatedResults = results.slice(startIndex, endIndex);
+    const paginatedResults = filteredArticles.slice(startIndex, endIndex);
 
     resultsDiv.innerHTML = '';
 
@@ -157,7 +158,7 @@ function displayResults(results, page) {
         resultsDiv.appendChild(articleDiv);
     });
 
-    updatePaginationControls(results.length, page);
+    updatePaginationControls(filteredArticles.length, page);
 }
 
 function updatePaginationControls(totalResults, page) {
@@ -169,8 +170,7 @@ function updatePaginationControls(totalResults, page) {
 
 function changePage(delta) {
     const newPage = currentPage + delta;
-    searchArticles();
-    displayResults(articles, newPage);
+    displayResults(newPage);
 }
 
 function saveForLater(articleId) {
