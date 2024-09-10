@@ -13,16 +13,16 @@ const searchBtn = document.getElementById('searchBtn');
 const resultsDiv = document.getElementById('results');
 const loadingSpinner = document.getElementById('loadingSpinner');
 const pageInfo = document.getElementById('pageInfo');
-const prevPage = document.getElementById('prevPage');
-const nextPage = document.getElementById('nextPage');
+const prevPageBtn = document.getElementById('prevPage');
+const nextPageBtn = document.getElementById('nextPage');
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', initializeApp);
 darkModeToggle.addEventListener('change', toggleDarkMode);
 languageSelect.addEventListener('change', loadLanguageData);
 searchBtn.addEventListener('click', searchArticles);
-prevPage.addEventListener('click', () => changePage(-1));
-nextPage.addEventListener('click', () => changePage(1));
+prevPageBtn.addEventListener('click', () => changePage(-1));
+nextPageBtn.addEventListener('click', () => changePage(1));
 
 // Debounced search function
 const debouncedSearch = debounce(searchArticles, 300);
@@ -115,17 +115,18 @@ function searchArticles() {
     filteredArticles = articles.filter(article => {
         const titleMatch = article.title && article.title.toLowerCase().includes(topic);
         const summaryMatch = article.summary && article.summary.toLowerCase().includes(topic);
+        const translatedSummaryMatch = article.translated_summary && article.translated_summary.toLowerCase().includes(topic);
         const ilrMatch = ilr === '' || article.ilr_quantized === ilr;
 
-        return (topic === '' || titleMatch || summaryMatch) && ilrMatch;
+        return (topic === '' || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch;
     });
 
-    displayResults(1);
+    currentPage = 1; // Reset to first page when searching
+    displayResults();
 }
 
-function displayResults(page) {
-    currentPage = page;
-    const startIndex = (page - 1) * resultsPerPage;
+function displayResults() {
+    const startIndex = (currentPage - 1) * resultsPerPage;
     const endIndex = startIndex + resultsPerPage;
     const paginatedResults = filteredArticles.slice(startIndex, endIndex);
 
@@ -146,6 +147,10 @@ function displayResults(page) {
                     <h5 class="card-title">${article.title || 'No Title'}</h5>
                     <h6 class="card-subtitle mb-2 text-muted">${article.language || 'Unknown Language'}</h6>
                     <p class="card-text">${article.summary || 'No summary available'}</p>
+                    <div class="mt-3">
+                        <h6 class="card-subtitle mb-2 text-muted">Translated Summary</h6>
+                        <p class="card-text">${article.translated_summary || 'No translated summary available'}</p>
+                    </div>
                 </div>
                 <div class="card-footer bg-transparent border-top-0">
                     ${article.link ? `<a href="${article.link}" class="btn btn-sm btn-outline-primary" target="_blank">Read Full Article</a>` : ''}
@@ -158,19 +163,24 @@ function displayResults(page) {
         resultsDiv.appendChild(articleDiv);
     });
 
-    updatePaginationControls(filteredArticles.length, page);
+    updatePaginationControls();
 }
 
-function updatePaginationControls(totalResults, page) {
-    const totalPages = Math.ceil(totalResults / resultsPerPage);
-    pageInfo.textContent = `Page ${page} of ${totalPages}`;
-    prevPage.disabled = page === 1;
-    nextPage.disabled = page === totalPages;
+function updatePaginationControls() {
+    const totalPages = Math.ceil(filteredArticles.length / resultsPerPage);
+    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+    prevPageBtn.disabled = currentPage === 1;
+    nextPageBtn.disabled = currentPage === totalPages;
 }
 
 function changePage(delta) {
     const newPage = currentPage + delta;
-    displayResults(newPage);
+    const totalPages = Math.ceil(filteredArticles.length / resultsPerPage);
+    
+    if (newPage >= 1 && newPage <= totalPages) {
+        currentPage = newPage;
+        displayResults();
+    }
 }
 
 function saveForLater(articleId) {

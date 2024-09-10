@@ -1,5 +1,6 @@
 {
   "spanish": [
+    "ILR_CSVs/translated_spanish_news_07192024.csv",
     "ILR_CSVs/spanish_news_articles_with_ilr7182024.csv",
     "ILR_CSVs/spanish_news_articles_with_ilr7192024.csv"
   ],
@@ -7,16 +8,18 @@
     "ILR_CSVs/english_news_articles_with_ilr7182024.csv"
   ],
   "arabic": [
-    "ILR_CSVs/arabic_news_articles_with_ilr7182024.csv",
+    "ILR_CSVs/translated_arabic_news_07182024.csv",
     "ILR_CSVs/arabic_news_articles_with_ilr_7_19_24.csv"
   ],
   "french": [
-    "ILR_CSVs/french_news_articles_with_ilr7192024.csv"
+    "ILR_CSVs/translated_french_news7192024.csv"
   ],
   "turkish": [
     "ILR_CSVs/turkish_news_part1.csv"
   ],
   "german": [
-    "ILR_CSVs/german_news_articles_with_ilr.csv"
+    "ILR_CSVs/translated_german_news.csv",
+    "ILR_CSVs/translated_german_news09092024.csv"
+
   ]
 }
