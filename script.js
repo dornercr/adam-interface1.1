@@ -4,6 +4,11 @@ let filteredArticles = [];
 let currentPage = 1;
 const resultsPerPage = 50;
 
+// Helper function for generating unique IDs
+function generateId() {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
 // DOM elements
 const darkModeToggle = document.getElementById('darkModeToggle');
 const languageSelect = document.getElementById('languageSelect');
@@ -85,7 +90,23 @@ function loadLanguageData() {
             return Promise.all(promises);
         })
         .then(results => {
-            articles = results.flatMap(result => result.data);
+            articles = results.flatMap(result => {
+                // Add debug logging
+                const firstArticle = result.data[0];
+                console.log("Available fields:", Object.keys(firstArticle));
+                
+                return result.data.map(article => ({
+                    ...article,
+                    title: article.title || '',
+                    summary: article.summary || '',
+                    // Try both field names for translations
+                    translated_summary: article.translated_summary || article.translated || '',
+                    ilr_quantized: article.ilr_quantized || '',
+                    link: article.link || '',
+                    id: article.id || generateId()
+                }));
+            });
+            console.log("Sample processed article:", articles[0]);
             populateILRDropdown();
             searchArticles();
             showToast(`Loaded ${articles.length} articles for ${language}`, 'success');
@@ -111,39 +132,19 @@ function populateILRDropdown() {
 function searchArticles() {
     const topic = topicSearch.value.toLowerCase();
     const ilr = ilrSelect.value;
-    const lowRange = parseFloat(document.getElementById('lowRange').value);
-    const highRange = parseFloat(document.getElementById('highRange').value);
 
     filteredArticles = articles.filter(article => {
-        const titleMatch = article.title && article.title.toLowerCase().includes(topic);
-        const summaryMatch = article.summary && article.summary.toLowerCase().includes(topic);
-        const translatedSummaryMatch = article.translated_summary && article.translated_summary.toLowerCase().includes(topic);
+        const titleMatch = article.title.toLowerCase().includes(topic);
+        const summaryMatch = article.summary.toLowerCase().includes(topic);
+        const translatedSummaryMatch = article.translated_summary.toLowerCase().includes(topic);
         const ilrMatch = ilr === '' || article.ilr_quantized === ilr;
 
-        // Parse ilr_range if it's a string
-        let rangeMatch = true;
-        if (article.ilr_range && typeof article.ilr_range === 'string') {
-            try {
-                const parsedRange = JSON.parse(article.ilr_range.replace(/'/g, '"')); // Replace single quotes if needed
-                if (Array.isArray(parsedRange)) {
-                    const low = parseFloat(parsedRange[0]);
-                    const high = parseFloat(parsedRange[1]);
-                    rangeMatch = (isNaN(lowRange) || low >= lowRange) &&
-                                 (isNaN(highRange) || high <= highRange);
-                }
-            } catch (err) {
-                console.error("Error parsing ilr_range:", err);
-                rangeMatch = false; // Exclude invalid ranges
-            }
-        }
-
-        return (topic === '' || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch && rangeMatch;
+        return (topic === '' || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch;
     });
 
-    currentPage = 1; // Reset to the first page when searching
+    currentPage = 1;
     displayResults();
 }
-
 
 function displayResults() {
     const startIndex = (currentPage - 1) * resultsPerPage;
@@ -157,73 +158,48 @@ function displayResults() {
         return;
     }
 
-    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex].textContent; // Get the selected language name
+    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex].textContent;
 
     paginatedResults.forEach(article => {
-        // Skip articles without a title
-        if (!article.title) return;
-
-        let ilrRangeDisplay = 'N/A';
-
-        // Parse ilr_range if it's a string
-        if (article.ilr_range && typeof article.ilr_range === 'string') {
-            try {
-                const parsedRange = JSON.parse(article.ilr_range.replace(/'/g, '"'));
-                if (Array.isArray(parsedRange)) {
-                    const low = parseFloat(parsedRange[0]);
-                    const high = parseFloat(parsedRange[1]);
-                    ilrRangeDisplay = `[${low.toFixed(2)}, ${high.toFixed(2)}]`;
-                }
-            } catch (err) {
-                console.error("Error parsing ilr_range:", err);
-            }
-        }
-
-        // Check if title, summary, or translated summary contains Arabic text
-        const isArabicTitle = /[\u0600-\u06FF]/.test(article.title);
-        const isArabicSummary = /[\u0600-\u06FF]/.test(article.summary);
-        const isArabicTranslatedSummary = /[\u0600-\u06FF]/.test(article.translated_summary);
+        // Check for RTL text
+        const isRTL = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(article.title + article.summary);
+        const rtlStyle = isRTL ? 'text-align: right; direction: rtl;' : '';
 
         const articleDiv = document.createElement('div');
         articleDiv.className = 'col-md-6 mb-4';
-        articleDiv.innerHTML = `
-            <div class="card h-100">
-                <div class="card-body">
-                    <span class="badge bg-primary ilr-badge">ILR ${article.ilr_quantized || 'N/A'}</span>
-                    <h5 class="card-title" style="${isArabicTitle ? 'text-align: right; direction: rtl;' : ''}">
-                        ${article.title}
-                    </h5>
-                    <h6 class="card-subtitle mb-2 text-muted">${selectedLanguage}</h6>
-                    <p class="card-text" style="${isArabicSummary ? 'text-align: right; direction: rtl;' : ''}">
-                        ${article.summary || 'No summary available'}
-                    </p>
-                    <p class="card-text"><strong>ILR Range:</strong> ${ilrRangeDisplay}</p>
-                    <div class="mt-3">
-                        <h6 class="card-subtitle mb-2 text-muted">Translated Summary</h6>
-                        <p class="card-text" style="${isArabicTranslatedSummary ? 'text-align: right; direction: rtl;' : ''}">
-                            ${article.translated_summary || 'No translated summary available'}
-                        </p>
-                    </div>
-                </div>
-                <div class="card-footer bg-transparent border-top-0">
-                    ${article.link ? `<a href="${article.link}" class="btn btn-sm btn-outline-primary" target="_blank">Read Full Article</a>` : ''}
-                    <button class="btn btn-sm btn-outline-secondary ms-2" onclick="saveForLater('${article.id}')">
-                        Save for Later
-                    </button>
-                </div>
+        
+        const card = document.createElement('div');
+        card.className = 'card h-100';
+        card.innerHTML = `
+            <div class="card-body">
+                <span class="badge bg-primary ilr-badge">ILR ${article.ilr_quantized || 'N/A'}</span>
+                <h5 class="card-title mb-3" style="${rtlStyle}">${article.title}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">${selectedLanguage}</h6>
+                
+                <h6 class="card-subtitle mt-3 mb-2">Original Text</h6>
+                <p class="card-text" style="${rtlStyle}">${article.summary || 'No summary available'}</p>
+                
+                <h6 class="card-subtitle mt-3 mb-2">English Translation</h6>
+                <p class="card-text">${article.translated_summary || 'No translated summary available'}</p>
+            </div>
+            <div class="card-footer bg-transparent border-top-0">
+                ${article.link ? `
+                    <a href="${article.link}" class="btn btn-sm btn-outline-primary" target="_blank">
+                        Read Full Article
+                    </a>
+                ` : ''}
+                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="saveForLater('${article.id}')">
+                    Save for Later
+                </button>
             </div>
         `;
+        
+        articleDiv.appendChild(card);
         resultsDiv.appendChild(articleDiv);
     });
 
     updatePaginationControls();
 }
-
-
-
-
-
-
 
 function updatePaginationControls() {
     const totalPages = Math.ceil(filteredArticles.length / resultsPerPage);
@@ -243,7 +219,6 @@ function changePage(delta) {
 }
 
 function saveForLater(articleId) {
-    // Implement save for later functionality
     showToast(`Article ${articleId} saved for later`, 'info');
 }
 
@@ -262,14 +237,14 @@ function showToast(message, type = 'info') {
     toast.setAttribute('role', 'alert');
     toast.setAttribute('aria-live', 'assertive');
     toast.setAttribute('aria-atomic', 'true');
+    
     toast.innerHTML = `
         <div class="d-flex">
-            <div class="toast-body">
-                ${message}
-            </div>
+            <div class="toast-body">${message}</div>
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
     `;
+    
     toastContainer.appendChild(toast);
     const bsToast = new bootstrap.Toast(toast);
     bsToast.show();
