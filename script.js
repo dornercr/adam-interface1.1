@@ -111,6 +111,8 @@ function populateILRDropdown() {
 function searchArticles() {
     const topic = topicSearch.value.toLowerCase();
     const ilr = ilrSelect.value;
+    const lowRange = parseFloat(document.getElementById('lowRange').value);
+    const highRange = parseFloat(document.getElementById('highRange').value);
 
     filteredArticles = articles.filter(article => {
         const titleMatch = article.title && article.title.toLowerCase().includes(topic);
@@ -118,12 +120,30 @@ function searchArticles() {
         const translatedSummaryMatch = article.translated_summary && article.translated_summary.toLowerCase().includes(topic);
         const ilrMatch = ilr === '' || article.ilr_quantized === ilr;
 
-        return (topic === '' || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch;
+        // Parse ilr_range if it's a string
+        let rangeMatch = true;
+        if (article.ilr_range && typeof article.ilr_range === 'string') {
+            try {
+                const parsedRange = JSON.parse(article.ilr_range.replace(/'/g, '"')); // Replace single quotes if needed
+                if (Array.isArray(parsedRange)) {
+                    const low = parseFloat(parsedRange[0]);
+                    const high = parseFloat(parsedRange[1]);
+                    rangeMatch = (isNaN(lowRange) || low >= lowRange) &&
+                                 (isNaN(highRange) || high <= highRange);
+                }
+            } catch (err) {
+                console.error("Error parsing ilr_range:", err);
+                rangeMatch = false; // Exclude invalid ranges
+            }
+        }
+
+        return (topic === '' || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch && rangeMatch;
     });
 
-    currentPage = 1; // Reset to first page when searching
+    currentPage = 1; // Reset to the first page when searching
     displayResults();
 }
+
 
 function displayResults() {
     const startIndex = (currentPage - 1) * resultsPerPage;
@@ -137,19 +157,52 @@ function displayResults() {
         return;
     }
 
+    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex].textContent; // Get the selected language name
+
     paginatedResults.forEach(article => {
+        // Skip articles without a title
+        if (!article.title) return;
+
+        let ilrRangeDisplay = 'N/A';
+
+        // Parse ilr_range if it's a string
+        if (article.ilr_range && typeof article.ilr_range === 'string') {
+            try {
+                const parsedRange = JSON.parse(article.ilr_range.replace(/'/g, '"'));
+                if (Array.isArray(parsedRange)) {
+                    const low = parseFloat(parsedRange[0]);
+                    const high = parseFloat(parsedRange[1]);
+                    ilrRangeDisplay = `[${low.toFixed(2)}, ${high.toFixed(2)}]`;
+                }
+            } catch (err) {
+                console.error("Error parsing ilr_range:", err);
+            }
+        }
+
+        // Check if title, summary, or translated summary contains Arabic text
+        const isArabicTitle = /[\u0600-\u06FF]/.test(article.title);
+        const isArabicSummary = /[\u0600-\u06FF]/.test(article.summary);
+        const isArabicTranslatedSummary = /[\u0600-\u06FF]/.test(article.translated_summary);
+
         const articleDiv = document.createElement('div');
         articleDiv.className = 'col-md-6 mb-4';
         articleDiv.innerHTML = `
             <div class="card h-100">
                 <div class="card-body">
                     <span class="badge bg-primary ilr-badge">ILR ${article.ilr_quantized || 'N/A'}</span>
-                    <h5 class="card-title">${article.title || 'No Title'}</h5>
-                    <h6 class="card-subtitle mb-2 text-muted">${article.language || 'Unknown Language'}</h6>
-                    <p class="card-text">${article.summary || 'No summary available'}</p>
+                    <h5 class="card-title" style="${isArabicTitle ? 'text-align: right; direction: rtl;' : ''}">
+                        ${article.title}
+                    </h5>
+                    <h6 class="card-subtitle mb-2 text-muted">${selectedLanguage}</h6>
+                    <p class="card-text" style="${isArabicSummary ? 'text-align: right; direction: rtl;' : ''}">
+                        ${article.summary || 'No summary available'}
+                    </p>
+                    <p class="card-text"><strong>ILR Range:</strong> ${ilrRangeDisplay}</p>
                     <div class="mt-3">
                         <h6 class="card-subtitle mb-2 text-muted">Translated Summary</h6>
-                        <p class="card-text">${article.translated_summary || 'No translated summary available'}</p>
+                        <p class="card-text" style="${isArabicTranslatedSummary ? 'text-align: right; direction: rtl;' : ''}">
+                            ${article.translated_summary || 'No translated summary available'}
+                        </p>
                     </div>
                 </div>
                 <div class="card-footer bg-transparent border-top-0">
@@ -165,6 +218,12 @@ function displayResults() {
 
     updatePaginationControls();
 }
+
+
+
+
+
+
 
 function updatePaginationControls() {
     const totalPages = Math.ceil(filteredArticles.length / resultsPerPage);
