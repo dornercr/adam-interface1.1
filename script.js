@@ -142,15 +142,12 @@ function loadLanguageData() {
 function normalizeILRLevel(ilr) {
     if (!ilr) return 'N/A';
 
-    // Convert to string and trim
     const ilrStr = String(ilr).trim();
 
-    // Direct match
     if (predefinedILRLevels.includes(ilrStr)) {
         return ilrStr;
     }
 
-    // Attempt to parse as float and fix to one decimal
     const ilrFloat = parseFloat(ilrStr);
     if (!isNaN(ilrFloat)) {
         const ilrFormatted = ilrFloat.toFixed(1);
@@ -159,7 +156,6 @@ function normalizeILRLevel(ilr) {
         }
     }
 
-    // Handle cases like "ILR 1.0"
     if (ilrStr.startsWith("ILR ")) {
         const ilrValue = ilrStr.substring(4);
         if (predefinedILRLevels.includes(ilrValue)) {
@@ -167,7 +163,6 @@ function normalizeILRLevel(ilr) {
         }
     }
 
-    // If no match, return 'N/A'
     return 'N/A';
 }
 
@@ -188,43 +183,113 @@ function populateILRDropdown() {
  * Filters and sorts articles based on search criteria and ILR selection.
  */
 function searchArticles() {
-    const topic = topicSearch.value.toLowerCase();
-    const ilr = ilrSelect.value;
+    const topic = topicSearch.value.trim().toLowerCase();
+    const selectedILR = ilrSelect.value;
+    const lowRange = parseFloat(document.getElementById('lowRange').value);
+    const highRange = parseFloat(document.getElementById('highRange').value);
+
+    console.log("Topic:", topic, "Selected ILR:", selectedILR, "Low Range:", lowRange, "High Range:", highRange);
 
     filteredArticles = articles.filter(article => {
         const titleMatch = article.title.toLowerCase().includes(topic);
         const summaryMatch = article.summary.toLowerCase().includes(topic);
         const translatedSummaryMatch = article.translated_summary.toLowerCase().includes(topic);
-        const ilrMatch = ilr === '' || article.ilr_quantized === ilr;
 
-        return (topic === '' || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch;
+        // Start by checking ILR quantized match
+        let ilrMatch = !selectedILR || article.ilr_quantized === selectedILR;
+
+        // Parse article ilr_range
+        if (article.ilr_range) {
+            let parsedRange;
+            try {
+                // Try parsing as JSON
+                parsedRange = JSON.parse(article.ilr_range);
+            } catch (err) {
+                // If that fails, try comma-separated
+                const parts = article.ilr_range.split(',').map(val => parseFloat(val.trim()));
+                if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                    parsedRange = parts;
+                }
+            }
+
+            if (Array.isArray(parsedRange) && parsedRange.length === 2) {
+                const [low, high] = parsedRange.map(val => parseFloat(val));
+                if (!isNaN(low) && !isNaN(high)) {
+                    // Apply user range filters if provided
+                    if (!isNaN(lowRange) && !isNaN(highRange)) {
+                        // Check if the article fits inside the user's specified range
+                        ilrMatch = ilrMatch && (low >= lowRange && high <= highRange);
+                    } else if (!isNaN(lowRange)) {
+                        ilrMatch = ilrMatch && (low >= lowRange);
+                    } else if (!isNaN(highRange)) {
+                        ilrMatch = ilrMatch && (high <= highRange);
+                    }
+                }
+            }
+        }
+
+        return (topic === "" || titleMatch || summaryMatch || translatedSummaryMatch) && ilrMatch;
     });
+
+    console.log("Filtered Articles Count:", filteredArticles.length);
+    console.log("Filtered Articles:", filteredArticles);
 
     // Sort filteredArticles: Articles with translated_summary first
     filteredArticles.sort((a, b) => {
-        const aHasTranslation = a.translated_summary && a.translated_summary.trim() !== '';
-        const bHasTranslation = b.translated_summary && b.translated_summary.trim() !== '';
+        const aHasTranslation = a.translated_summary && a.translated_summary.trim() !== "";
+        const bHasTranslation = b.translated_summary && b.translated_summary.trim() !== "";
 
-        if (aHasTranslation && !bHasTranslation) return -1; // a comes before b
-        if (!aHasTranslation && bHasTranslation) return 1;  // b comes before a
-        return 0; // no change
+        if (aHasTranslation && !bHasTranslation) return -1;
+        if (!aHasTranslation && bHasTranslation) return 1;
+        return 0;
     });
 
-    currentPage = 1;
+    currentPage = 1; 
     displayResults();
 }
 
 /**
+ * Parses and formats the ILR range value.
+ */
+function formatILRRange(range) {
+    if (!range) return 'N/A';
+    try {
+        let parsedRange;
+        if (Array.isArray(range)) {
+            parsedRange = range;
+        } else if (typeof range === 'string') {
+            range = range.trim();
+            if (range.startsWith('[') && range.endsWith(']')) {
+                parsedRange = JSON.parse(range);
+            } else {
+                parsedRange = range.split(',').map(num => parseFloat(num.trim()));
+            }
+        }
+
+        if (
+            Array.isArray(parsedRange) &&
+            parsedRange.length === 2 &&
+            !isNaN(parsedRange[0]) &&
+            !isNaN(parsedRange[1])
+        ) {
+            const [low, high] = parsedRange.map(val => parseFloat(val));
+            if (low >= 0 && low <= 5 && high >= 0 && high <= 5 && low <= high) {
+                return `[${low.toFixed(1)}, ${high.toFixed(1)}]`;
+            }
+        }
+
+        return 'N/A';
+    } catch (error) {
+        console.error("Error parsing ILR range:", error, range);
+        return 'N/A';
+    }
+}
+
+/**
  * Truncates a given text to the specified number of words.
- * Adds an ellipsis (...) if the text exceeds the word limit.
- *
- * @param {string} text - The text to be truncated.
- * @param {number} wordLimit - The maximum number of words allowed.
- * @returns {string} - The truncated text with an ellipsis if needed.
  */
 function truncateText(text, wordLimit) {
     if (!text) return 'No translated summary available';
-    
     const words = text.trim().split(/\s+/);
     if (words.length <= wordLimit) {
         return text;
@@ -247,34 +312,16 @@ function displayResults() {
         return;
     }
 
-    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex].textContent; // Get the selected language name
+    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex]?.textContent || '';
 
     paginatedResults.forEach(article => {
-        // Skip articles without a title
         if (!article.title) return;
+        const ilrRangeDisplay = formatILRRange(article.ilr_range);
 
-        let ilrRangeDisplay = 'N/A';
-
-        // Parse ilr_range if it's a string
-        if (article.ilr_range && typeof article.ilr_range === 'string') {
-            try {
-                const parsedRange = JSON.parse(article.ilr_range.replace(/'/g, '"'));
-                if (Array.isArray(parsedRange)) {
-                    const low = parseFloat(parsedRange[0]);
-                    const high = parseFloat(parsedRange[1]);
-                    ilrRangeDisplay = `[${low.toFixed(2)}, ${high.toFixed(2)}]`;
-                }
-            } catch (err) {
-                console.error("Error parsing ilr_range:", err);
-            }
-        }
-
-        // Check if title, summary, or translated summary contains Arabic text
         const isArabicTitle = /[\u0600-\u06FF]/.test(article.title);
         const isArabicSummary = /[\u0600-\u06FF]/.test(article.summary);
         const isArabicTranslatedSummary = /[\u0600-\u06FF]/.test(article.translated_summary);
 
-        // Truncate the translated summary to 200 words
         const truncatedTranslatedSummary = truncateText(article.translated_summary, 200);
 
         const articleDiv = document.createElement('div');
@@ -282,7 +329,9 @@ function displayResults() {
         articleDiv.innerHTML = `
             <div class="card h-100">
                 <div class="card-body">
-                    <span class="badge ${article.ilr_quantized !== 'N/A' ? 'bg-primary' : 'bg-secondary'} ilr-badge">ILR ${article.ilr_quantized || 'N/A'}</span>
+                    <span class="badge ${article.ilr_quantized !== 'N/A' ? 'bg-primary' : 'bg-secondary'} ilr-badge">
+                        ILR ${article.ilr_quantized || 'N/A'}
+                    </span>
                     <h5 class="card-title" style="${isArabicTitle ? 'text-align: right; direction: rtl;' : ''}">
                         ${sanitizeHTML(article.title)}
                     </h5>
@@ -290,7 +339,9 @@ function displayResults() {
                     <p class="card-text" style="${isArabicSummary ? 'text-align: right; direction: rtl;' : ''}">
                         ${sanitizeHTML(article.summary) || 'No summary available'}
                     </p>
-                    <p class="card-text"><strong>ILR Range:</strong> ${sanitizeHTML(ilrRangeDisplay)}</p>
+                    <p class="card-text">
+                        <strong>ILR Range:</strong> ${sanitizeHTML(ilrRangeDisplay)}
+                    </p>
                     <div class="mt-3">
                         <h6 class="card-subtitle mb-2 text-muted">Translated Summary</h6>
                         <p class="card-text" style="${isArabicTranslatedSummary ? 'text-align: right; direction: rtl;' : ''}">
@@ -299,7 +350,11 @@ function displayResults() {
                     </div>
                 </div>
                 <div class="card-footer bg-transparent border-top-0">
-                    ${article.link ? `<a href="${sanitizeURL(article.link)}" class="btn btn-sm btn-outline-primary" target="_blank">Read Full Article</a>` : ''}
+                    ${article.link ? 
+                        `<a href="${sanitizeURL(article.link)}" class="btn btn-sm btn-outline-primary" target="_blank">
+                            Read Full Article
+                        </a>` : ''
+                    }
                     <button class="btn btn-sm btn-outline-secondary ms-2" onclick="saveForLater('${sanitizeHTML(article.id)}')">
                         Save for Later
                     </button>
@@ -313,7 +368,7 @@ function displayResults() {
 }
 
 /**
- * Updates the pagination controls based on the current page and total results.
+ * Updates the pagination controls.
  */
 function updatePaginationControls() {
     const totalPages = Math.ceil(filteredArticles.length / resultsPerPage);
@@ -323,13 +378,11 @@ function updatePaginationControls() {
 }
 
 /**
- * Changes the current page by a given delta (e.g., -1 for previous, +1 for next).
- * @param {number} delta - The change in page number.
+ * Changes the current page.
  */
 function changePage(delta) {
     const newPage = currentPage + delta;
     const totalPages = Math.ceil(filteredArticles.length / resultsPerPage);
-    
     if (newPage >= 1 && newPage <= totalPages) {
         currentPage = newPage;
         displayResults();
@@ -338,10 +391,8 @@ function changePage(delta) {
 
 /**
  * Saves an article for later viewing.
- * @param {string} articleId - The unique identifier of the article.
  */
 function saveForLater(articleId) {
-    // Implement actual save functionality as needed
     showToast(`Article ${sanitizeHTML(articleId)} saved for later`, 'info');
 }
 
@@ -360,13 +411,11 @@ function hideLoading() {
 }
 
 /**
- * Displays a toast notification with a given message and type.
- * @param {string} message - The message to display.
- * @param {string} type - The type of toast ('info', 'success', 'danger', etc.).
+ * Displays a toast notification.
  */
 function showToast(message, type = 'info') {
     const toastContainer = document.querySelector('.toast-container');
-    if (!toastContainer) return; // Ensure the container exists
+    if (!toastContainer) return; 
 
     const toast = document.createElement('div');
     toast.className = `toast align-items-center text-white bg-${type} border-0`;
@@ -387,9 +436,7 @@ function showToast(message, type = 'info') {
 }
 
 /**
- * Sanitizes HTML to prevent XSS attacks.
- * @param {string} str - The string to sanitize.
- * @returns {string} - The sanitized string.
+ * Sanitizes HTML.
  */
 function sanitizeHTML(str) {
     const temp = document.createElement('div');
@@ -398,9 +445,7 @@ function sanitizeHTML(str) {
 }
 
 /**
- * Sanitizes URLs to prevent XSS attacks.
- * @param {string} url - The URL to sanitize.
- * @returns {string} - The sanitized URL.
+ * Sanitizes URLs.
  */
 function sanitizeURL(url) {
     try {
@@ -413,18 +458,14 @@ function sanitizeURL(url) {
 }
 
 /**
- * Generates a unique identifier.
- * @returns {string} - A unique ID.
+ * Generates a unique ID.
  */
 function generateId() {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
 /**
- * Utility function to extend Papa Parse with promise support.
- * @param {string} file - The file to parse.
- * @param {object} config - Papa Parse configuration options.
- * @returns {Promise} - A promise that resolves with the parse results.
+ * Extend Papa Parse with a promise-based method.
  */
 Papa.parsePromise = function(file, config) {
     return new Promise((complete, error) => {
@@ -433,11 +474,7 @@ Papa.parsePromise = function(file, config) {
 };
 
 /**
- * Utility function for debouncing.
- * Delays the execution of a function until after a specified wait time has elapsed since the last time it was invoked.
- * @param {function} func - The function to debounce.
- * @param {number} wait - The delay in milliseconds.
- * @returns {function} - The debounced function.
+ * Debounce utility function.
  */
 function debounce(func, wait) {
     let timeout;
